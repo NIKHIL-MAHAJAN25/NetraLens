@@ -45,7 +45,7 @@ class BakingViewModel(application: Application) : AndroidViewModel(application) 
         _uiState.value = UiState.Processing("Thinking...")
 
         // The "Wake Word" for the "Expert" brain
-        if (spokenText.startsWith("Netra", ignoreCase = true) ||
+        if (spokenText.startsWith("Gemini", ignoreCase = true) ||
             spokenText.startsWith("describe", ignoreCase = true)
         ) {
             // This is a complex, paid task.
