@@ -47,7 +47,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toComposeRect
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -209,9 +208,9 @@ fun BakingScreen(
     val analyzer = remember {
         ObjectAnalyzer(
            context = context, // Pass context for MediaPipe (if you use it later)
-            onObjectsDetected = { labels, bounds ->
-                bakingViewModel.onMlKitObjectsDetected(labels, bounds)
-                Log.d("ObjectAnalyzer", "Found objects: $labels")
+            onObjectsDetected = { labels, bounds, direction ->
+                bakingViewModel.onMlKitObjectsDetected(labels, bounds, direction)
+                Log.d("ObjectAnalyzer", "Found: $labels at $direction")
             },
             onTextDetected = { text ->
                 bakingViewModel.onMlKitTextDetected(text)

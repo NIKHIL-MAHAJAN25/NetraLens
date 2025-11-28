@@ -18,22 +18,18 @@ import com.google.mlkit.vision.text.TextRecognition
 import com.google.mlkit.vision.text.latin.TextRecognizerOptions
 import java.io.ByteArrayOutputStream
 
-/**
- * ### The "Hybrid Reflex" Brain
- * - Objects: MediaPipe (80 classes: Laptop, Bottle, Person, etc.)
- * - Text: ML Kit (Best-in-class OCR)
- */
 class ObjectAnalyzer(
-    context: Context, // Changed: We need context to load the .tflite file
-    private val onObjectsDetected: (List<String>, Rect) -> Unit,
+    context: Context,
+    // CHANGED: Added 'String' parameter for direction
+    private val onObjectsDetected: (List<String>, Rect, String) -> Unit,
     private val onTextDetected: (String) -> Unit
 ) : ImageAnalysis.Analyzer {
 
-    // 1. MediaPipe Detector (For Objects)
     private var objectDetector: ObjectDetector? = null
-
-    // 2. ML Kit Detector (For Text)
     private val textRecognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
+
+    // NEW: We track the width to calculate "Left/Right"
+    private var currentImageWidth = 0
 
     init {
         setupMediaPipe(context)
@@ -41,22 +37,21 @@ class ObjectAnalyzer(
 
     private fun setupMediaPipe(context: Context) {
         val baseOptions = BaseOptions.builder()
-            .setModelAssetPath("efficientdet.tflite") // Matches your file in assets
+            .setModelAssetPath("efficientdet.tflite")
             .build()
 
         val options = ObjectDetector.ObjectDetectorOptions.builder()
             .setBaseOptions(baseOptions)
             .setRunningMode(RunningMode.LIVE_STREAM)
-            .setScoreThreshold(0.5f) // Only show if 50% sure
-            .setMaxResults(1) // Only show the #1 most prominent object
+            .setScoreThreshold(0.5f)
+            .setMaxResults(1)
             .setResultListener { result, _ ->
-                // This runs when MediaPipe finds an object
                 val detections = result.detections()
                 if (detections.isNotEmpty()) {
                     val firstDetection = detections[0]
-                    val label = firstDetection.categories()[0].categoryName() // e.g. "laptop"
-
+                    val label = firstDetection.categories()[0].categoryName()
                     val box = firstDetection.boundingBox()
+
                     val rect = Rect(
                         box.left.toInt(),
                         box.top.toInt(),
@@ -64,12 +59,23 @@ class ObjectAnalyzer(
                         box.bottom.toInt()
                     )
 
-                    onObjectsDetected(listOf(label), rect)
+                    // --- NEW: Calculate Direction ---
+                    val centerX = box.centerX()
+                    val direction = if (currentImageWidth > 0) {
+                        when {
+                            centerX < currentImageWidth * 0.35 -> "to your left"
+                            centerX > currentImageWidth * 0.65 -> "to your right"
+                            else -> "ahead"
+                        }
+                    } else {
+                        "ahead"
+                    }
+
+                    // Pass the direction to the callback
+                    onObjectsDetected(listOf(label), rect, direction)
                 }
             }
-            .setErrorListener { e ->
-                e.printStackTrace()
-            }
+            .setErrorListener { e -> e.printStackTrace() }
             .build()
 
         try {
@@ -83,21 +89,18 @@ class ObjectAnalyzer(
     override fun analyze(imageProxy: ImageProxy) {
         val mediaImage = imageProxy.image
         if (mediaImage != null) {
-
-            // --- 1. Analyze Objects (MediaPipe) ---
             val bitmap = imageProxy.toBitmap()
             if (bitmap != null && objectDetector != null) {
-                // Rotate to match screen
                 val rotatedBitmap = rotateBitmap(bitmap, imageProxy.imageInfo.rotationDegrees.toFloat())
 
-                // Convert to MediaPipe Image
-                val mpImage = BitmapImageBuilder(rotatedBitmap).build()
+                // NEW: Update width for calculations
+                currentImageWidth = rotatedBitmap.width
 
-                // DETECT!
+                val mpImage = BitmapImageBuilder(rotatedBitmap).build()
                 objectDetector?.detectAsync(mpImage, SystemClock.uptimeMillis())
             }
 
-            // --- 2. Analyze Text (ML Kit) ---
+            // Text Recognition logic remains the same...
             val inputImage = InputImage.fromMediaImage(mediaImage, imageProxy.imageInfo.rotationDegrees)
             textRecognizer.process(inputImage)
                 .addOnSuccessListener { visionText ->
@@ -106,7 +109,6 @@ class ObjectAnalyzer(
                     }
                 }
                 .addOnCompleteListener {
-                    // CRITICAL: Close the frame only after processing is done
                     imageProxy.close()
                 }
         } else {
@@ -114,22 +116,18 @@ class ObjectAnalyzer(
         }
     }
 
-    // --- Helpers ---
+    // --- Helpers (Same as before) ---
     private fun ImageProxy.toBitmap(): Bitmap? {
         val yBuffer = planes[0].buffer
         val uBuffer = planes[1].buffer
         val vBuffer = planes[2].buffer
-
         val ySize = yBuffer.remaining()
         val uSize = uBuffer.remaining()
         val vSize = vBuffer.remaining()
-
         val nv21 = ByteArray(ySize + uSize + vSize)
-
         yBuffer.get(nv21, 0, ySize)
         vBuffer.get(nv21, ySize, vSize)
         uBuffer.get(nv21, ySize + vSize, uSize)
-
         val yuvImage = YuvImage(nv21, android.graphics.ImageFormat.NV21, this.width, this.height, null)
         val out = ByteArrayOutputStream()
         yuvImage.compressToJpeg(Rect(0, 0, this.width, this.height), 100, out)

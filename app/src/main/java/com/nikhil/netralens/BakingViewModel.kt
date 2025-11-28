@@ -143,18 +143,21 @@ class BakingViewModel(application: Application) : AndroidViewModel(application) 
      * It checks if the objects it found match the `mlKitTargetObject`
      * (our "order").
      */
-    fun onMlKitObjectsDetected(labels: List<String>, bounds: Rect) {
+    fun onMlKitObjectsDetected(labels: List<String>, bounds: Rect,direction: String) {
         // Only act if we are actively looking for an object
         if (mlKitTargetObject == null) return
 
+        // Simple matching logic
         val foundObject = labels.firstOrNull { label ->
-            label.equals(mlKitTargetObject, ignoreCase = true)
+            label.contains(mlKitTargetObject!!, ignoreCase = true)
         }
 
         if (foundObject != null) {
-            val successMessage = "Found $foundObject!"
+            // NEW: Include direction in the speech
+            val successMessage = "Found $foundObject $direction."
+
             _uiState.value = UiState.Success(successMessage, bounds)
-            ttsManager.speak(successMessage) // C. Speak the final ML Kit result!
+            ttsManager.speak(successMessage) // e.g. "Found Laptop to your right."
             mlKitTargetObject = null
         }
     }
