@@ -3,6 +3,7 @@ package com.nikhil.netralens
 import android.app.Application
 import android.graphics.Bitmap
 import android.graphics.Rect
+import android.util.Log
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -13,14 +14,20 @@ import androidx.lifecycle.viewModelScope
 
 import com.google.ai.client.generativeai.GenerativeModel
 import com.google.ai.client.generativeai.type.content
+import com.nikhil.netralens.LocationHelper.LocationHelper
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
 class BakingViewModel(application: Application) : AndroidViewModel(application) {
-    private val ttsManager = TTSmanager(application)
+    val ttsManager = TTSmanager(application)
+    // Light Mode State
+    var isLightModeOn by mutableStateOf(false)
+        private set
+    private val locationHelper = LocationHelper(application.applicationContext)
     private val _uiState: MutableStateFlow<UiState> =
         MutableStateFlow(UiState.Idle)
     val uiState: StateFlow<UiState> =
@@ -42,8 +49,30 @@ class BakingViewModel(application: Application) : AndroidViewModel(application) 
      * spoken text and decides which "brain" to use.
      */
     fun processUserRequest(spokenText: String) {
-        _uiState.value = UiState.Processing("Thinking...")
+        val lowerText = spokenText.lowercase()
 
+        // --- NEW: Light Mode Command ---
+        if (lowerText.contains("light") && (lowerText.contains("mode") || lowerText.contains("sensor"))) {
+            if (lowerText.contains("on") || lowerText.contains("start")) {
+                isLightModeOn = true
+                ttsManager.speak("Light guidance on.")
+            } else if (lowerText.contains("off") || lowerText.contains("stop")) {
+                isLightModeOn = false
+                ttsManager.speak("Light guidance off.")
+            }
+            return
+        }
+        _uiState.value = UiState.Processing("Thinking...")
+        if (_uiState.value is UiState.FallDetected) {
+            if (spokenText.contains("stop", ignoreCase = true) ||
+                spokenText.contains("ok", ignoreCase = true) ||
+                spokenText.contains("cancel", ignoreCase = true)) {
+
+                _uiState.value = UiState.Idle
+                ttsManager.speak("SOS Cancelled.")
+                return
+            }
+        }
         // The "Wake Word" for the "Expert" brain
         if (spokenText.startsWith("Gemini", ignoreCase = true) ||
             spokenText.startsWith("describe", ignoreCase = true)
@@ -195,6 +224,47 @@ class BakingViewModel(application: Application) : AndroidViewModel(application) 
     override fun onCleared() {
         super.onCleared()
         ttsManager.shutdown() // D. Clean up the "Mouth"
+    }
+    // ... inside BakingViewModel class ...
+
+    // Emergency Contact (Hardcode for demo, or use a settings input later)
+    private val EMERGENCY_PHONE = "7529073222" // REPLACE WITH A REAL NUMBER FOR TESTING
+
+    fun onFallDetected() {
+        if (_uiState.value !is UiState.FallDetected) {
+            _uiState.value = UiState.FallDetected
+            ttsManager.speak("Fall detected. Sending SOS in 10 seconds. Say Stop to cancel.")
+
+            // Start a 10-second countdown
+            viewModelScope.launch {
+                delay(10000) // 10 seconds
+                // Check if user is STILL in FallDetected state (didn't cancel)
+                if (_uiState.value is UiState.FallDetected) {
+                    sendSOS()
+                }
+            }
+        }
+    }
+
+    private fun sendSOS() {
+        // Step A: Get Location first
+        locationHelper.getCurrentLocation { locationLink ->
+
+            // Step B: Send SMS once we have the link
+            try {
+                val smsManager = android.telephony.SmsManager.getDefault()
+                val message = "SOS! Fall detected. Help me here: $locationLink"
+
+                // Replace with your real phone number for testing
+                smsManager.sendTextMessage(EMERGENCY_PHONE, null, message, null, null)
+
+                _uiState.value = UiState.Success("SOS Sent", android.graphics.Rect())
+                ttsManager.speak("SOS sent with location.")
+            } catch (e: Exception) {
+                _uiState.value = UiState.Error("SMS Failed")
+                ttsManager.speak("Could not send S O S.")
+            }
+        }
     }
 
 // --- ViewModel Logic Functions End ---

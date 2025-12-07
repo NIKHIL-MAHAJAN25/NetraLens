@@ -35,6 +35,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -54,6 +55,8 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.nikhil.netralens.fall.FallDetector
+import com.nikhil.netralens.fall.LightDetector
 import com.nikhil.netralens.mlkit.ObjectAnalyzer
 import java.nio.ByteBuffer
 import java.util.concurrent.Executors
@@ -93,25 +96,35 @@ fun createSpeechToTextIntent(): Intent {
 @Composable
 fun rememberCameraPermissionState(): Boolean {
     val context = LocalContext.current
+
+    // The list of all permissions we need
+    val permissions = listOf(
+        Manifest.permission.CAMERA,
+        Manifest.permission.ACCESS_FINE_LOCATION,
+        Manifest.permission.SEND_SMS
+    )
+
+    // Check if we already have them
     var hasPermission by remember {
         mutableStateOf(
-            ContextCompat.checkSelfPermission(
-                context,
-                Manifest.permission.CAMERA
-            ) == PackageManager.PERMISSION_GRANTED
+            permissions.all {
+                ContextCompat.checkSelfPermission(context, it) == PackageManager.PERMISSION_GRANTED
+            }
         )
     }
 
-    val permissionLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.RequestPermission(),
-        onResult = { isGranted ->
-            hasPermission = isGranted
-        }
-    )
+    // The launcher to ask for them
+    val launcher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestMultiplePermissions()
+    ) { result ->
+        // result is a Map<String, Boolean>. Check if all values are true.
+        hasPermission = result.values.all { it }
+    }
 
-    LaunchedEffect(key1 = true) {
+    // Launch request on start
+    LaunchedEffect(true) {
         if (!hasPermission) {
-            permissionLauncher.launch(Manifest.permission.CAMERA)
+            launcher.launch(permissions.toTypedArray())
         }
     }
     return hasPermission
@@ -197,7 +210,35 @@ fun BakingScreen(
     LaunchedEffect(key1 = true) {
         bakingViewModel.onIdle()
     }
+    // --- NEW: Fall Detector Logic ---
+    val fallDetector = remember {
+        FallDetector(context) {
+            bakingViewModel.onFallDetected()
+        }
+    }
+    // 1. Initialize the Light Detector
+    val lightDetector = remember { LightDetector(context) }
 
+    // 2. Listen to the ViewModel switch
+    // Note: 'isLightModeOn' will be red if you haven't updated BakingViewModel yet!
+    LaunchedEffect(bakingViewModel.isLightModeOn) {
+        if (bakingViewModel.isLightModeOn) {
+            lightDetector.start()
+        } else {
+            lightDetector.stop()
+        }
+    }
+
+    // 3. Safety cleanup (Stop beeping if screen closes)
+    DisposableEffect(Unit) {
+        onDispose { lightDetector.stop() }
+    }
+    // Start sensor when screen opens, stop when closes
+    DisposableEffect(Unit) {
+        fallDetector.start()
+        onDispose { fallDetector.stop() }
+    }
+    // -------------------------------
     var spokenText by remember { mutableStateOf("Tap anywhere to speak.") }
 
     val speechLauncher = rememberstt { text ->
@@ -225,6 +266,10 @@ fun BakingScreen(
 
     // Expert Brain Trigger
     LaunchedEffect(uiState) {
+        if (uiState is UiState.FallDetected) {
+            kotlinx.coroutines.delay(3000) // Wait for TTS warning
+            speechLauncher.launch(createSpeechToTextIntent())
+        }
         if ((uiState as? UiState.Success)?.outputText == "CAPTURE_PHOTO") {
             // Updated function call (capital P)
             takePhoto(context, imageCapture) { bitmap ->
@@ -238,6 +283,10 @@ fun BakingScreen(
             .fillMaxSize()
             .background(Color.Black)
             .clickable {
+                if (uiState is UiState.FallDetected) {
+                    bakingViewModel.onIdle()
+                    bakingViewModel.ttsManager.speak("Cancelled")
+                }
                 if (uiState !is UiState.Processing) {
                     bakingViewModel.onIdle()
                     speechLauncher.launch(createSpeechToTextIntent())
@@ -257,6 +306,21 @@ fun BakingScreen(
         } else {
             Text("Camera permission is required.", color = Color.White)
         }
+        if (uiState is UiState.FallDetected) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Red.copy(alpha = 0.8f))
+                    .padding(16.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text("FALL DETECTED!", style = MaterialTheme.typography.displayLarge, color = Color.White)
+                    Text("Sending SMS in 10s...\nTap or say 'Stop' to cancel", color = Color.White, textAlign = TextAlign.Center)
+                }
+            }
+        }
+        // -----------------------------
 
         // UI Overlay
         Box(
@@ -285,6 +349,13 @@ fun BakingScreen(
                             modifier = Modifier.padding(top = 8.dp)
                         )
                     }
+                }
+                // --- NEW BRANCH ADDED HERE ---
+                is UiState.FallDetected -> {
+                    // We handle the main Red Alert screen separately in the code above,
+                    // so for this specific overlay box, we can just show a small text
+                    // or nothing at all since the big red box covers everything.
+                    Text("SOS Mode Active", color = Color.Red)
                 }
                 is UiState.Error -> {
                     Text(state.errorMessage, color = MaterialTheme.colorScheme.error)

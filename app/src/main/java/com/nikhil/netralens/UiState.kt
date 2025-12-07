@@ -21,6 +21,7 @@ import android.graphics.Rect
 sealed interface UiState {
     object Idle : UiState
     object Listening : UiState
+    object FallDetected : UiState
     data class Processing(val message: String) : UiState
     data class Success(val outputText: String, val bounds: Rect = Rect()) : UiState
     data class Error(val errorMessage: String) : UiState

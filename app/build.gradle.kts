@@ -59,6 +59,7 @@ android {
 }
 
 dependencies {
+    implementation("com.google.android.gms:play-services-location:21.2.0")
     implementation("com.google.mediapipe:tasks-vision:0.10.14")
     // This BOM ensures all your Compose libraries are version-compatible, fixing the clickable crash.
     implementation(platform("com.google.firebase:firebase-bom:34.4.0"))
