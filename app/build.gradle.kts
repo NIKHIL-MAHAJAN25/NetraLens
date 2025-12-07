@@ -59,6 +59,7 @@ android {
 }
 
 dependencies {
+    implementation("com.google.mlkit:face-detection:16.1.7")
     implementation("com.google.android.gms:play-services-location:21.2.0")
     implementation("com.google.mediapipe:tasks-vision:0.10.14")
     // This BOM ensures all your Compose libraries are version-compatible, fixing the clickable crash.

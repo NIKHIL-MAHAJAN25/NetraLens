@@ -25,6 +25,8 @@ import kotlinx.coroutines.launch
 class BakingViewModel(application: Application) : AndroidViewModel(application) {
     val ttsManager = TTSmanager(application)
     // Light Mode State
+    var isFaceModeOn by mutableStateOf(false)
+        private set
     var isLightModeOn by mutableStateOf(false)
         private set
     private val locationHelper = LocationHelper(application.applicationContext)
@@ -50,7 +52,22 @@ class BakingViewModel(application: Application) : AndroidViewModel(application) 
      */
     fun processUserRequest(spokenText: String) {
         val lowerText = spokenText.lowercase()
+        // --- NEW: Face Mode Command ---
+        // Triggers: "Who is this", "Find people", "Look for person"
+        if (lowerText.contains("who") || lowerText.contains("people") || lowerText.contains("person")) {
+            isFaceModeOn = true
 
+            // IMPORTANT: Turn off other modes to prevent talking over each other
+            // isLightModeOn = false (Uncomment if you have light mode)
+
+            ttsManager.speak("Looking for people...")
+            return
+        }
+        if (lowerText.contains("stop") && isFaceModeOn) {
+            isFaceModeOn = false
+            ttsManager.speak("Stopped looking.")
+            return
+        }
         // --- NEW: Light Mode Command ---
         if (lowerText.contains("light") && (lowerText.contains("mode") || lowerText.contains("sensor"))) {
             if (lowerText.contains("on") || lowerText.contains("start")) {
@@ -266,9 +283,15 @@ class BakingViewModel(application: Application) : AndroidViewModel(application) 
             }
         }
     }
-
+    fun onFaceDetected(message: String) {
+        // Double-check the mode is ON before speaking
+        if (isFaceModeOn) {
+            ttsManager.speak(message)
+        }
+    }
 // --- ViewModel Logic Functions End ---
 }
+
 
 
 /**

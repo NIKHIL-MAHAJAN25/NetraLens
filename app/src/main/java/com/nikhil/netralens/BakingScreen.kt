@@ -55,6 +55,7 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.nikhil.netralens.FaceAnalyzer.FaceAnalyzer
 import com.nikhil.netralens.fall.FallDetector
 import com.nikhil.netralens.fall.LightDetector
 import com.nikhil.netralens.mlkit.ObjectAnalyzer
@@ -259,6 +260,18 @@ fun BakingScreen(
             }
         )
     }
+    val faceAnalyzer = remember {
+        FaceAnalyzer { message ->
+            bakingViewModel.onFaceDetected(message)
+        }
+    }
+
+    // 3. Logic: Pick the correct analyzer
+    val activeAnalyzer = if (bakingViewModel.isFaceModeOn) {
+        faceAnalyzer
+    } else {
+        analyzer
+    }
 
     val imageCapture = remember {
         ImageCapture.Builder().build()
@@ -298,8 +311,8 @@ fun BakingScreen(
             CameraPreview(
                 // NEW: Only turn on ML Kit when we are looking for something!
                 // This saves massive battery.
-                enableMlKit = (uiState is UiState.Processing),
-                analyzer = analyzer,
+                enableMlKit = (uiState is UiState.Processing) || bakingViewModel.isFaceModeOn,
+                analyzer = activeAnalyzer,
                 imageCapture = imageCapture,
                 modifier = Modifier.fillMaxSize()
             )
