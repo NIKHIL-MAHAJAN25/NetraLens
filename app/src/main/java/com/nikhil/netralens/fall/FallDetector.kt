@@ -12,8 +12,7 @@ class FallDetector(context: Context, private val onFallDetected: () -> Unit) : S
     private val sensorManager = context.getSystemService(Context.SENSOR_SERVICE) as SensorManager
     private val accelerometer = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
 
-    // Threshold: Gravity is ~9.8. A fall impact is usually > 25.
-    // We use 20f to make it easier to test by shaking hard.
+
     private val IMPACT_THRESHOLD = 40f
     private var lastFallTime: Long = 0
 

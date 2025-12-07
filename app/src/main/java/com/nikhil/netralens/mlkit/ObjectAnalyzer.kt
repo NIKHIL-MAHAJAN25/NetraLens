@@ -63,12 +63,12 @@ class ObjectAnalyzer(
                     val centerX = box.centerX()
                     val direction = if (currentImageWidth > 0) {
                         when {
-                            centerX < currentImageWidth * 0.35 -> "to your left"
-                            centerX > currentImageWidth * 0.65 -> "to your right"
-                            else -> "ahead"
+                            centerX < currentImageWidth * 0.35 -> "Left"
+                            centerX > currentImageWidth * 0.65 -> "Right"
+                            else -> "Center"
                         }
                     } else {
-                        "ahead"
+                        "Center"
                     }
 
                     // Pass the direction to the callback

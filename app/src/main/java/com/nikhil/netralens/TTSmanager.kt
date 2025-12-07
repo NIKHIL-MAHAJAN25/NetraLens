@@ -43,7 +43,11 @@ class TTSmanager (
             Log.e("TTS", "Initialization failed!")
         }
     }
-
+    fun stop() {
+        if (isReady) {
+            tts.stop()
+        }
+    }
     fun speak(text: String) {
         if (isReady) {
             tts.speak(text, TextToSpeech.QUEUE_FLUSH, null, null)

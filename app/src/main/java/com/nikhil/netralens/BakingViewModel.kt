@@ -204,7 +204,7 @@ class BakingViewModel(application: Application) : AndroidViewModel(application) 
 
             _uiState.value = UiState.Success(successMessage, bounds)
             ttsManager.speak(successMessage) // e.g. "Found Laptop to your right."
-            mlKitTargetObject = null
+
         }
     }
 
@@ -282,6 +282,18 @@ class BakingViewModel(application: Application) : AndroidViewModel(application) 
                 ttsManager.speak("Could not send S O S.")
             }
         }
+    }
+    fun cancelSearch() {
+        // 1. Stop any current TTS (like "Looking for laptop...")
+        ttsManager.stop()
+
+        // 2. Force the UI back to "Idle" (Tap to speak)
+        // This breaks the "Processing/Searching" lock.
+        _uiState.value = UiState.Idle
+
+        // Optional: If you have a variable tracking the specific object (e.g. var targetObject: String?),
+        // set it to null here.
+        // targetObject = null
     }
     fun onFaceDetected(message: String) {
         // Double-check the mode is ON before speaking

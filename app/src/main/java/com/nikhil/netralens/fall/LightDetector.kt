@@ -19,7 +19,7 @@ class LightDetector(context: Context) : SensorEventListener {
     private val sensorManager = context.getSystemService(Context.SENSOR_SERVICE) as SensorManager
     private val lightSensor = sensorManager.getDefaultSensor(Sensor.TYPE_LIGHT)
 
-    // Generates system beeps without needing MP3 files
+
     private val toneGenerator = ToneGenerator(AudioManager.STREAM_MUSIC, 100)
 
     private var currentLux = 0f

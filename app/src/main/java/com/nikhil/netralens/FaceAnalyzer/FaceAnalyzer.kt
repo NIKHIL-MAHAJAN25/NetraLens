@@ -10,7 +10,7 @@ class FaceAnalyzer (
     private val onFaceDetected: (String) -> Unit
 ) : ImageAnalysis.Analyzer {
 
-    // 1. Configure Options: We MUST enable "Classifications" to see smiles
+
     private val options = FaceDetectorOptions.Builder()
         .setPerformanceMode(FaceDetectorOptions.PERFORMANCE_MODE_FAST)
         .setLandmarkMode(FaceDetectorOptions.LANDMARK_MODE_NONE)
@@ -19,9 +19,9 @@ class FaceAnalyzer (
 
     private val detector = FaceDetection.getClient(options)
 
-    // Rate Limiter: Don't speak every single frame (it's too fast)
+
     private var lastSpeakTime = 0L
-    private val SPEAK_DELAY = 4000L // Speak once every 4 seconds
+    private val SPEAK_DELAY = 4000L
 
     @androidx.annotation.OptIn(androidx.camera.core.ExperimentalGetImage::class)
     override fun analyze(imageProxy: ImageProxy) {
@@ -31,15 +31,14 @@ class FaceAnalyzer (
 
             detector.process(image)
                 .addOnSuccessListener { faces ->
-                    // Only process if we found faces and the time delay has passed
+
                     val now = System.currentTimeMillis()
                     if (faces.isNotEmpty() && (now - lastSpeakTime > SPEAK_DELAY)) {
 
                         val count = faces.size
                         val firstFace = faces[0]
 
-                        // Check Smile Probability (0.0 to 1.0)
-                        // If it's null, assume 0.
+
                         val smileProb = firstFace.smilingProbability ?: 0f
                         val isSmiling = smileProb > 0.5f
 
@@ -57,10 +56,10 @@ class FaceAnalyzer (
                     }
                 }
                 .addOnFailureListener { e ->
-                    // Handle errors silently
+
                 }
                 .addOnCompleteListener {
-                    // CRITICAL: You must close the image, or the camera freezes!
+
                     imageProxy.close()
                 }
         } else {

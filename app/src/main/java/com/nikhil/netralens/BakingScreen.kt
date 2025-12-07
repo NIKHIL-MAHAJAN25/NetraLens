@@ -10,6 +10,7 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Matrix
 import android.graphics.Rect
+import android.os.Build
 import android.speech.RecognizerIntent
 import android.util.Log
 import androidx.activity.compose.ManagedActivityResultLauncher
@@ -61,6 +62,10 @@ import com.nikhil.netralens.fall.LightDetector
 import com.nikhil.netralens.mlkit.ObjectAnalyzer
 import java.nio.ByteBuffer
 import java.util.concurrent.Executors
+import android.os.VibrationEffect
+import android.os.Vibrator
+import android.os.VibratorManager
+import androidx.annotation.RequiresApi
 
 // --- Speech-to-Text Logic Start ---
 @Composable
@@ -134,6 +139,7 @@ fun rememberCameraPermissionState(): Boolean {
 
 // --- Camera Preview Composable Start ---
 @Composable
+
 fun CameraPreview(
     // NEW: We added this parameter to turn ML Kit on/off
     enableMlKit: Boolean,
@@ -195,6 +201,7 @@ fun CameraPreview(
 
 
 // --- Main Screen Composable Start ---
+@RequiresApi(Build.VERSION_CODES.O)
 @Composable
 fun BakingScreen(
     bakingViewModel: BakingViewModel = viewModel(
@@ -246,17 +253,77 @@ fun BakingScreen(
         spokenText = text
         bakingViewModel.processUserRequest(text)
     }
-
+    // 1. Setup Vibrator (Get the phone's motor)
+    val vibrator = remember {
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+            val vibManager = context.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as VibratorManager
+            vibManager.defaultVibrator
+        } else {
+            @Suppress("DEPRECATION")
+            context.getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
+        }
+    }
+    // Timer to prevent "Vibration Spam" (only vibe every 400ms)
+    var lastVibrateTime by remember { mutableStateOf(0L) }
+    var debugLog by remember { mutableStateOf("Debug: Waiting...") }
     val analyzer = remember {
         ObjectAnalyzer(
-           context = context, // Pass context for MediaPipe (if you use it later)
+            context = context,
             onObjectsDetected = { labels, bounds, direction ->
                 bakingViewModel.onMlKitObjectsDetected(labels, bounds, direction)
-                Log.d("ObjectAnalyzer", "Found: $labels at $direction")
+
+                // --- DEBUG LOGIC START ---
+                // Show us EVERYTHING the camera sees
+                val allLabels = labels.joinToString(", ")
+                debugLog = "Saw: $allLabels \nDir: $direction"
+                // -------------------------
+
+                if (bakingViewModel.mlKitTargetObject != null) {
+                    // Check match
+                    val isTarget = labels.any {
+                        it.contains(bakingViewModel.mlKitTargetObject!!, ignoreCase = true)
+                    }
+
+                    // Update debug to show if we matched
+                    if (isTarget) debugLog += "\nMATCHED! VIBRATING..."
+
+                    if (isTarget) {
+                        val now = System.currentTimeMillis()
+                        if (now - lastVibrateTime > 400) {
+                            lastVibrateTime = now
+
+                            // Force Vibrate Logic (Old School)
+                            when (direction) {
+                                "Left" -> {
+                                    if (android.os.Build.VERSION.SDK_INT >= 26) {
+                                        vibrator.vibrate(VibrationEffect.createWaveform(longArrayOf(0, 50, 50, 50), -1))
+                                    } else {
+                                        vibrator.vibrate(longArrayOf(0, 50, 50, 50), -1)
+                                    }
+                                }
+                                "Right" -> {
+                                    if (android.os.Build.VERSION.SDK_INT >= 26) {
+                                        vibrator.vibrate(VibrationEffect.createOneShot(300, VibrationEffect.DEFAULT_AMPLITUDE))
+                                    } else {
+                                        vibrator.vibrate(300)
+                                    }
+                                }
+                                "Center" -> {
+                                    if (android.os.Build.VERSION.SDK_INT >= 26) {
+                                        vibrator.vibrate(VibrationEffect.createOneShot(50, 255))
+                                    } else {
+                                        vibrator.vibrate(50)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    debugLog += "\n(No Target Set - Say 'Find X')"
+                }
             },
             onTextDetected = { text ->
                 bakingViewModel.onMlKitTextDetected(text)
-                Log.d("ObjectAnalyzer", "Found text: $text")
             }
         )
     }
@@ -300,8 +367,16 @@ fun BakingScreen(
                     bakingViewModel.onIdle()
                     bakingViewModel.ttsManager.speak("Cancelled")
                 }
-                if (uiState !is UiState.Processing) {
+                else if (uiState is UiState.Processing) {
+                    bakingViewModel.cancelSearch() // <--- Calls the new function
+                }
+                else if (uiState is UiState.Success) {
+                    bakingViewModel.ttsManager.stop()
                     bakingViewModel.onIdle()
+                }
+
+                // Priority 4: Normal case - Start Listening
+                else {
                     speechLauncher.launch(createSpeechToTextIntent())
                 }
             },
@@ -480,6 +555,7 @@ fun Modifier.drawBoundingBox(box: Rect) = this.then(
     }
 )
 
+@RequiresApi(Build.VERSION_CODES.O)
 @Preview(showSystemUi = true)
 @Composable
 fun BakingScreenPreview() {

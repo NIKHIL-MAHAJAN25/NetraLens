@@ -11,9 +11,9 @@ class LocationHelper(context: Context) {
     // The entry point to Google's Location Services
     private val fusedLocationClient = LocationServices.getFusedLocationProviderClient(context)
 
-    @SuppressLint("MissingPermission") // We check permissions in the UI before calling this
+    @SuppressLint("MissingPermission")
     fun getCurrentLocation(onResult: (String) -> Unit) {
-        // "Priority.PRIORITY_HIGH_ACCURACY" asks the GPS chip to wake up
+
         fusedLocationClient.getCurrentLocation(
             Priority.PRIORITY_HIGH_ACCURACY,
             CancellationTokenSource().token
